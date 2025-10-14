@@ -577,9 +577,6 @@ class OptimizedSubtitleConverter:
         self.logger.info(f"⏱️  总用时: {total_elapsed/60:.1f} 分钟")
         self.logger.info(f"📁 输出文件夹: {output_folder}")
         
-        # 生成处理报告
-        self.generate_batch_report(processed_files, output_path, total_elapsed)
-        
         return processed_files
 
     def clean_filename(self, filename: str) -> str:
@@ -601,38 +598,6 @@ class OptimizedSubtitleConverter:
             clean = clean[:50].rstrip('_')
         
         return clean or "processed_file"
-
-    def generate_batch_report(self, results: List[Dict], output_folder: Path, total_time: float):
-        """生成批量处理报告"""
-        report_file = output_folder / "batch_process_report.md"
-        
-        with open(report_file, 'w', encoding='utf-8') as f:
-            f.write("# 批量处理报告\n\n")
-            f.write(f"- **处理时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"- **总用时**: {total_time/60:.1f} 分钟\n")
-            f.write(f"- **总文件数**: {len(results)}\n")
-            
-            success_count = sum(1 for r in results if r['status'] == 'success')
-            f.write(f"- **成功数量**: {success_count}\n")
-            f.write(f"- **失败数量**: {len(results) - success_count}\n\n")
-            
-            f.write("## 处理详情\n\n")
-            
-            for i, result in enumerate(results, 1):
-                input_name = Path(result['input']).name
-                status_icon = "✅" if result['status'] == 'success' else "❌"
-                
-                f.write(f"### {i}. {status_icon} {input_name}\n\n")
-                
-                if result['status'] == 'success':
-                    output_name = Path(result['output']).name
-                    f.write(f"- **输出文件**: `{output_name}`\n")
-                else:
-                    f.write(f"- **错误**: {result.get('error', '未知错误')}\n")
-                
-                f.write("\n")
-        
-        self.logger.info(f"📋 生成处理报告: {report_file}")
 
     async def batch_process_folder_async(self, input_folder: str, output_folder: str = None, file_pattern: str = "*.txt"):
         """异步批量处理文件夹"""
