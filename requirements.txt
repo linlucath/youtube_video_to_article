@@ -1,0 +1,6 @@
+# YouTube 字幕下载所需依赖
+youtube-transcript-api>=0.6.0
+yt-dlp>=2023.0.0
+
+# 现有项目依赖
+aiohttp>=3.9.0

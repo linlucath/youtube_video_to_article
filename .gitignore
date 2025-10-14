@@ -1,0 +1,7 @@
+prompt_command.md
+raw/
+processed/
+mindmap/
+logs/
+__pycache__/
+.venv/
