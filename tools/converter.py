@@ -92,19 +92,27 @@ class OptimizedSubtitleConverter:
 ==== 输出格式 ====
 必须严格按照以下格式输出，不得添加任何其他内容：
 
-[去除不完整句子的英文整理段落]
-
+[去除不完整句子后的英文整理段落]
 [对应中文翻译]
 
 [不完整句子: 原始不完整文本]
 
-==== 禁止事项 ====
-- 禁止添加任何解释说明
-- 禁止添加处理步骤描述  
+==== 示例 ====
+输入文本：
+hello world this is a test and then we
+
+正确输出：
+Hello world. This is a test.
+
+你好世界。这是一个测试。
+
+[不完整句子: And then we]
+
+
+==== 注意事项 ====
+- 禁止添加任何解释说明, 标题, 序号或其他格式化标记
 - 禁止翻译不完整句子
 - 禁止自行补全截断的句子
-- 禁止添加标题、序号或其他格式化标记
-
 原始文本：
 {chunk}
 
@@ -145,6 +153,7 @@ class OptimizedSubtitleConverter:
             try:
                 prompt = self.prompt_template.format(chunk=chunk)
                 self.logger.debug(f"🔧 生成的提示词长度: {len(prompt)}字符")
+                self.logger.debug(f"📤 发送给AI的完整内容:\n{'='*80}\n{prompt}\n{'='*80}")
                 
                 payload = {
                     "model": self.config['model'],
@@ -185,7 +194,7 @@ class OptimizedSubtitleConverter:
                         if 'choices' in result and result['choices']:
                             raw_content = result['choices'][0]['message']['content'].strip()
                             self.logger.debug(f"🤖 AI原始返回长度: {len(raw_content)}字符")
-                            self.logger.debug(f"🤖 AI返回开头: '{raw_content[:150]}...'")
+                            self.logger.debug(f"🤖 AI返回的完整内容:\n{'='*80}\n{raw_content}\n{'='*80}")
                             
                             # 清理内容
                             content = self.strip_content(raw_content)
@@ -333,7 +342,7 @@ class OptimizedSubtitleConverter:
                     result = await self.process_chunk_async(session, chunk, i)
                     index, content = result
 
-                    self.logger.info(f"ai 返回内容:\n{content}\n")
+                    self.logger.info(f"✅ 块 {i+1} 处理成功，返回内容长度: {len(content)}字符")
                     
                     # 检查是否有不完整句子
                     content, new_incomplete = self.extract_incomplete_sentence(content)
@@ -391,7 +400,6 @@ class OptimizedSubtitleConverter:
             return clean_content, incomplete_sentence
         else:
             self.logger.debug("✅ 未发现不完整句子标记")
-            self.logger.debug(f"✅ 完整内容预览: '{content[:200]}...'")
         
         return content, ""
     

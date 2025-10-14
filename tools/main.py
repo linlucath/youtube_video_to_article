@@ -71,7 +71,7 @@ def main():
     )
     
     parser.add_argument(
-        'youtube_link',
+        '--youtube_link',
         help='YouTube 视频链接或视频ID'
     )
     
@@ -93,9 +93,10 @@ def main():
     # 步骤1: 下载字幕
     print("\n📥 步骤 1/3: 下载字幕...")
     downloader_args = [args.youtube_link, '--languages'] + args.languages
-    if not run_script('downloader.py', downloader_args):
-        print("\n❌ 管道执行失败: 字幕下载失败")
-        sys.exit(1)
+    if args.youtube_link:
+        if not run_script('downloader.py', downloader_args):
+            print("\n❌ 管道执行失败: 字幕下载失败")
+            sys.exit(1)
     
     # 步骤2: 转换字幕
     print("\n🔄 步骤 2/3: 转换字幕...")
