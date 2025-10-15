@@ -621,7 +621,7 @@ def main():
     parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='./raw')
     parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="output.md")
     parser.add_argument('-k', '--api-key', help='DeepSeek API密钥')
-    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=150)
+    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=100)
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')

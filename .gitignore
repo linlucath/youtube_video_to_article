@@ -5,3 +5,4 @@ mindmap/
 logs/
 __pycache__/
 .venv/
+config.yml
