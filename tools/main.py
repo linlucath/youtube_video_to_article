@@ -10,6 +10,7 @@ import os
 import subprocess
 from pathlib import Path
 import argparse
+import shutil
 
 
 def run_script(script_name: str, args: list = None) -> bool:
@@ -71,12 +72,12 @@ def main():
     )
     
     parser.add_argument(
-        '--youtube_link',
+        '--youtube_link', '-l', 
         help='YouTube 视频链接或视频ID'
     )
     
     parser.add_argument(
-        '--languages', '-l',
+        '--languages', '-L',
         nargs='+',
         default=['en'],
         help='要下载的字幕语言 (默认: en)'
@@ -91,7 +92,7 @@ def main():
     print(f"🌐 语言: {', '.join(args.languages)}")
     
     # 步骤1: 下载字幕
-    print("\n📥 步骤 1/3: 下载字幕...")
+    print("\n📥 步骤 1/4: 下载字幕...")
     downloader_args = [args.youtube_link, '--languages'] + args.languages
     if args.youtube_link:
         if not run_script('downloader.py', downloader_args):
@@ -99,7 +100,7 @@ def main():
             sys.exit(1)
     
     # 步骤2: 转换字幕
-    print("\n🔄 步骤 2/3: 转换字幕...")
+    print("\n🔄 步骤 2/4: 转换字幕...")
     # converter.py 会自动处理 raw 文件夹中的文件
     # 需要设置 DEEPSEEK_API_KEY 环境变量
     converter_args = ['--input_path', '../raw', '-o', '../processed']
@@ -108,19 +109,42 @@ def main():
         sys.exit(1)
     
     # 步骤3: 格式化输出
-    print("\n📝 步骤 3/3: 格式化输出...")
+    print("\n📝 步骤 3/4: 格式化输出...")
     if not run_script('formatter.py'):
         print("\n❌ 管道执行失败: 格式化失败")
         sys.exit(1)
+    
+    # 步骤4: 清理临时文件夹
+    print("\n🗑️  步骤 4/4: 清理临时文件夹...")
+    try:
+        raw_dir = Path(__file__).parent.parent / 'raw'
+        processed_dir = Path(__file__).parent.parent / 'processed'
+        
+        if raw_dir.exists():
+            shutil.rmtree(raw_dir)
+            print(f"  ✅ 已删除: {raw_dir}")
+        else:
+            print(f"  ⚠️  目录不存在: {raw_dir}")
+            
+        if processed_dir.exists():
+            shutil.rmtree(processed_dir)
+            print(f"  ✅ 已删除: {processed_dir}")
+        else:
+            print(f"  ⚠️  目录不存在: {processed_dir}")
+            
+        print("✅ 清理完成")
+        
+    except Exception as e:
+        print(f"❌ 清理文件夹时出错: {e}")
+        # 不中断流程，继续执行
     
     # 完成
     print("\n" + "="*60)
     print("🎉 所有步骤执行完成!")
     print("="*60)
     print("📂 处理结果:")
-    print("  - 原始字幕: raw/")
-    print("  - 转换后: processed/")
     print("  - 最终输出: 博客文件夹")
+    print("  - 临时文件已清理")
     print("="*60)
 
 

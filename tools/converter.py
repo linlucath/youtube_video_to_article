@@ -34,7 +34,6 @@ class OptimizedSubtitleConverter:
             "model": "deepseek-chat",
             "temperature": 0.1,  # 低温度确保准确性
             "max_tokens": 3500,
-            "chunk_size": 200,  # 每块默认包含的单词数
             "request_timeout": 40,
             "retry_attempts": 3,
             "retry_delay": 2,
@@ -93,6 +92,7 @@ class OptimizedSubtitleConverter:
 必须严格按照以下格式输出，不得添加任何其他内容：
 
 [去除不完整句子后的英文整理段落]
+
 [对应中文翻译]
 
 [不完整句子: 原始不完整文本]
@@ -113,6 +113,9 @@ Hello world. This is a test.
 - 禁止添加任何解释说明, 标题, 序号或其他格式化标记
 - 禁止翻译不完整句子
 - 禁止自行补全截断的句子
+- 整理后的段落末尾不应该含有不完整的句子
+- 对于不完整句子的识别应采取保守策略, 宁可过度标记也不可遗漏
+
 原始文本：
 {chunk}
 
@@ -618,7 +621,7 @@ def main():
     parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='./raw')
     parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="output.md")
     parser.add_argument('-k', '--api-key', help='DeepSeek API密钥')
-    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=200)
+    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=150)
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')
