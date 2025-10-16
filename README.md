@@ -8,7 +8,9 @@
 
 2. 设置环境变量 DEEPSEEK_API_KEY
 
-3. 执行 python ./main.py --youtube_link "youtube视频链接/ID"
+3. 执行 
+cd tools
+python ./main.py --youtube_link "{{youtube视频链接/ID}}"
 
 ## 其他
 
