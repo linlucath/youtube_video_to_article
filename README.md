@@ -13,3 +13,8 @@
 ## 其他
 
 1. --youtube_link 可使用 -l 代替
+
+## 效果展示
+
+-视频: https://www.youtube.com/watch?v=cfV70T6Owpw&list=PL5q_lef6zVkaTY_cT1k7qFNF2TidHCe-1&index=21
+-文章: https://linlucath.github.io/blog/session2022/session2022_notes/
