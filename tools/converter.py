@@ -607,8 +607,13 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
         if split_para_idx == -1:
             split_para_idx = len(para_positions) - 1
         
-        # 提取分割点前2个段落和后2个段落
-        start_idx = max(0, split_para_idx - 2)
+        # 提取分割点前1个段落和后2个段落（共4个段落，确保完整的英中配对）
+        # split_para_idx 通常是 chunk 末尾的中文段落，所以：
+        # - split_para_idx - 1: 对应的英文段落
+        # - split_para_idx: 中文段落（chunk1末尾）
+        # - split_para_idx + 1: 英文段落（chunk2开头）
+        # - split_para_idx + 2: 对应的中文段落
+        start_idx = max(0, split_para_idx - 1)
         end_idx = min(len(para_positions), split_para_idx + 3)
         
         # 计算实际的字符位置
@@ -632,6 +637,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
             (边界索引, 修复后的内容, 是否成功)
         """
         self.logger.info(f"🔧 正在优化边界 {boundary_index + 1}...")
+        self.logger.debug(f"📥 边界 {boundary_index + 1} 输入内容:\n{'='*60}\n{boundary_content}\n{'='*60}")
         
         for attempt in range(self.config['retry_attempts']):
             try:
@@ -674,6 +680,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
                         if 'choices' in result and result['choices']:
                             fixed_content = result['choices'][0]['message']['content'].strip()
                             self.logger.info(f"✅ 边界 {boundary_index + 1} 优化完成")
+                            self.logger.debug(f"📤 边界 {boundary_index + 1} AI返回内容:\n{'='*60}\n{fixed_content}\n{'='*60}")
                             return (boundary_index, fixed_content, True)
                         else:
                             raise Exception("API响应格式错误")
@@ -696,6 +703,11 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
         """应用单个边界修复"""
         if not fixed_content:
             return content
+        
+        # 记录被替换的原始内容
+        original_segment = content[start_pos:end_pos]
+        self.logger.debug(f"🔄 边界修复 - 原始内容 (位置 {start_pos}-{end_pos}):\n{'='*60}\n{original_segment}\n{'='*60}")
+        self.logger.debug(f"🔄 边界修复 - 替换为:\n{'='*60}\n{fixed_content}\n{'='*60}")
         
         # 清理修复内容
         cleaned_fix = fixed_content.strip()

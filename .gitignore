@@ -7,3 +7,5 @@ logs/
 __pycache__/
 .venv/
 config.yml
+
+test/
