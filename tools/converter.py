@@ -36,8 +36,7 @@ class OptimizedSubtitleConverter:
             "max_tokens": 3500,
             "request_timeout": 40,
             "retry_attempts": 3,
-            "retry_delay": 2,
-            "enable_retry": True  # 默认启用重处理
+            "retry_delay": 2
         }
         
         self.config = {**default_config, **(config or {})}
@@ -286,28 +285,9 @@ We are learning something new.
         # 顺序处理并处理不完整句子
         processed_chunks = await self.process_chunks_sequentially(chunks)
         
-        # 检查是否有失败的块需要重新处理
-        if self.failed_chunks and self.config.get('enable_retry', False):
-            self.logger.info(f"🔄 发现 {len(self.failed_chunks)} 个失败的块，开始重新处理...")
-            reprocessed_chunks = await self.reprocess_failed_chunks()
-            
-            # 创建失败块索引到重处理结果的映射
-            reprocess_map = {r['original_index']: r for r in reprocessed_chunks}
-            
-            # 替换失败的内容
-            for i, chunk in enumerate(processed_chunks):
-                if chunk.startswith("# 处理失败的内容"):
-                    # 根据位置推断原始块索引
-                    if i in reprocess_map:
-                        reprocessed = reprocess_map[i]
-                        processed_chunks[i] = reprocessed['content']
-                        status = "✅ 成功" if reprocessed['success'] else "🔧 已清理"
-                        self.logger.info(f"{status} 替换块 {i+1} 的失败内容")
-            
-            # 清空失败列表
-            self.failed_chunks.clear()
-        elif self.failed_chunks:
-            self.logger.info(f"⚠️  有 {len(self.failed_chunks)} 个块处理失败，但未启用自动重处理")
+        # 记录失败的块
+        if self.failed_chunks:
+            self.logger.warning(f"⚠️  有 {len(self.failed_chunks)} 个块处理失败")
         
         # 合并内容并获取分割位置
         final_content, split_positions = self.merge_content(processed_chunks)
@@ -592,24 +572,17 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
 
 （不要添加任何解释或标记）"""
 
-    def extract_boundary_context(self, content: str, split_position: int, 
-                                  context_chars: int = 500) -> tuple:
+    def extract_boundary_context(self, content: str, split_position: int) -> tuple:
         """
         根据分割位置提取边界上下文（提取分割点前后各2个段落）
         
         Args:
             content: 完整文档内容
             split_position: 分割点在文档中的字符位置
-            context_chars: 备用上下文字符数（当段落提取失败时使用）
             
         Returns:
             (边界上下文字符串, 实际开始位置, 实际结束位置)
         """
-        # 按段落分割（双换行符分隔）
-        # 先找到分割点所在的位置
-        paragraphs_before = []
-        paragraphs_after = []
-        
         # 将内容按双换行分割成段落
         parts = re.split(r'\n\n+', content)
         
@@ -754,8 +727,6 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
         
         self.logger.info(f"🔧 开始边界优化: {len(split_positions)} 个分割点")
         
-        context_chars = self.config.get('boundary_context_chars', 500)
-        
         # 顺序处理每个边界，并实时更新位置
         connector = aiohttp.TCPConnector(limit=1, limit_per_host=1)
         
@@ -766,7 +737,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
             for original_idx, split_pos in sorted_positions:
                 # 提取当前边界上下文
                 boundary_content, start_pos, end_pos = self.extract_boundary_context(
-                    content, split_pos, context_chars
+                    content, split_pos
                 )
                 
                 # 优化边界
@@ -882,12 +853,6 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
         
         return clean or "processed_file"
 
-    async def batch_process_folder_async(self, input_folder: str, output_folder: str = None, file_pattern: str = "*.txt"):
-        """异步批量处理文件夹"""
-        # 这个方法可以用于未来的优化，现在先使用同步版本
-        return self.batch_process_folder(input_folder, output_folder, file_pattern)
-
-
 def main():
     parser = argparse.ArgumentParser(description='优化字幕转换器 - 顺序处理、智能分块、段落级翻译')
     parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='../raw')
@@ -897,13 +862,10 @@ def main():
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')
-    parser.add_argument('--enable-retry', action='store_true', help='启用失败内容自动重处理')
     parser.add_argument('--enable-boundary-optimization', action='store_true', default=True,
                         help='启用边界优化（处理完成后用AI优化分块分割处，默认启用）')
     parser.add_argument('--disable-boundary-optimization', action='store_true',
                         help='禁用边界优化')
-    parser.add_argument('--boundary-context-chars', type=int, default=500,
-                        help='边界优化时前后各取的上下文字符数 (默认: 500)')
     
     args = parser.parse_args()
     
@@ -919,9 +881,7 @@ def main():
     config = {
         "chunk_size": args.chunk_size,
         "temperature": args.temperature,
-        "enable_retry": args.enable_retry,
-        "enable_boundary_optimization": args.enable_boundary_optimization and not args.disable_boundary_optimization,
-        "boundary_context_chars": args.boundary_context_chars
+        "enable_boundary_optimization": args.enable_boundary_optimization and not args.disable_boundary_optimization
     }
     
     try:
