@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Base paths
 base_path = "../"
-processed_path = os.path.join(base_path, "processed")
+processed_path = os.path.join(base_path, "output")
 
 # Load output_path from config
 config_path = os.path.join(base_path, "config.yml")

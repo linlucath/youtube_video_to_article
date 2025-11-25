@@ -1,6 +1,7 @@
 prompt_command.md
 raw/
 processed/
+output/
 mindmap/
 logs/
 __pycache__/

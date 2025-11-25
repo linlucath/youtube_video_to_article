@@ -85,36 +85,44 @@ class OptimizedSubtitleConverter:
 ==== 处理要求 ====
 1. **错误修正**：识别并修正可能存在的识别错误, 确保文本准确性
 2. **完整性检查**：检查文本末尾，识别被截断的不完整句子
-3. **段落整理**：仅对完整句子进行段落重组, 将不完整句子原样返回
+3. **段落整理**：将完整句子按语义分段（每2-4句为一段），用空行分隔
 4. **翻译准确性**：提供准确、专业、符合中文表达习惯的翻译
 
 ==== 输出格式 ====
-必须严格按照以下格式输出，不得添加任何其他内容：
+严格按照「英文段落 + 空行 + 中文翻译 + 空行」的格式交替输出：
 
-[去除不完整句子后的英文整理段落]
+English paragraph 1.
 
-[对应中文翻译]
+中文翻译1。
+
+English paragraph 2.
+
+中文翻译2。
 
 [不完整句子: 原始不完整文本]
 
 ==== 示例 ====
 输入文本：
-hello world this is a test and then we
+hello world this is a test we are learning something new and then we
 
 正确输出：
 Hello world. This is a test.
 
 你好世界。这是一个测试。
 
+We are learning something new.
+
+我们正在学习新东西。
+
 [不完整句子: And then we]
 
-
 ==== 注意事项 ====
-- 禁止添加任何解释说明, 标题, 序号或其他格式化标记
+- 每个英文段落后紧跟其对应的中文翻译
+- 段落之间用空行分隔
+- 禁止添加任何解释说明、标题、序号
 - 禁止翻译不完整句子
 - 禁止自行补全截断的句子
-- 整理后的段落末尾不应该含有不完整的句子
-- 对于不完整句子的识别应采取保守策略, 宁可过度标记也不可遗漏
+- 对于不完整句子的识别应采取保守策略
 
 原始文本：
 {chunk}
@@ -301,8 +309,17 @@ Hello world. This is a test.
         elif self.failed_chunks:
             self.logger.info(f"⚠️  有 {len(self.failed_chunks)} 个块处理失败，但未启用自动重处理")
         
-        # 合并内容
-        final_content = self.merge_content(processed_chunks)
+        # 合并内容并获取分割位置
+        final_content, split_positions = self.merge_content(processed_chunks)
+        
+        # 边界优化（如果启用）
+        if self.config.get('enable_boundary_optimization', False) and split_positions:
+            self.logger.info(f"🔧 开始边界优化，共 {len(split_positions)} 个分割点...")
+            try:
+                final_content = await self.optimize_boundaries_async(final_content, split_positions)
+                self.logger.info("✅ 边界优化完成")
+            except Exception as e:
+                self.logger.warning(f"⚠️ 边界优化失败: {e}")
         
         # 写入文件
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -406,8 +423,13 @@ Hello world. This is a test.
         
         return content, ""
     
-    def merge_content(self, chunks: List[str]) -> str:
-        """合并内容"""
+    def merge_content(self, chunks: List[str]) -> tuple:
+        """
+        合并内容并记录分割位置
+        
+        Returns:
+            (合并后的内容, 分割位置列表)
+        """
         self.logger.info(f"🔗 开始合并内容: 总块数={len(chunks)}")
         
         # 过滤空内容
@@ -418,17 +440,26 @@ Hello world. This is a test.
             empty_count = len(chunks) - len(valid_chunks)
             self.logger.warning(f"⚠️  发现 {empty_count} 个空块已被过滤")
         
-        # 合并
-        content = '\n\n'.join(valid_chunks)
+        # 合并并记录分割位置
+        split_positions = []
+        content = ""
+        for i, chunk in enumerate(valid_chunks):
+            if i > 0:
+                # 记录分割点位置（在添加分隔符之前）
+                split_positions.append(len(content))
+                content += "\n\n"
+            content += chunk
+        
         self.logger.info(f"🔗 合并后总长度: {len(content)}字符")
-        self.logger.debug(f"🔗 合并后的内容预览:\n{content[:500]}...")
+        self.logger.info(f"🔗 记录了 {len(split_positions)} 个分割位置")
+        self.logger.debug(f"🔗 分割位置: {split_positions[:10]}..." if len(split_positions) > 10 else f"🔗 分割位置: {split_positions}")
         
         # 最终清理
         self.logger.info("🧹 开始最终清理...")
         content = self.final_cleanup(content)
         self.logger.info(f"🧹 清理后总长度: {len(content)}字符")
         
-        return content
+        return content, split_positions
 
     def final_cleanup(self, content: str) -> str:
         """最终内容清理"""
@@ -510,6 +541,247 @@ Hello world. This is a test.
         
         self.logger.info(f"✅ 最终清理完成，长度: {len(content)} 字符")
         self.logger.debug(f"✅ 清理后内容开头:\n{content[:500]}...")
+        
+        return content
+
+    # ==================== 边界优化相关方法 ====================
+    
+    def get_boundary_optimization_prompt(self) -> str:
+        """获取边界优化的提示词"""
+        return """你是专业的文档编辑专家。以下文本来自视频字幕的分块翻译，由于分块边界问题产生了**内容重复**。
+
+==== 核心问题 ====
+分块处理时，一个句子可能被截断：
+- 前一块翻译了句子的一部分（可能不完整）
+- 后一块又从头翻译了同一句话
+
+这导致**同一个意思被翻译了两次**，产生重复的中文段落。
+
+==== 典型重复模式 ====
+输入可能是这样的：
+```
+We talked about loss functions to quantify how happy or unhappy.
+我们讨论了用损失函数来量化满意或不满意程度。
+
+How happy or unhappy we are with different settings of the weights.
+我们对不同权重设置的满意或不满意程度。
+```
+这里"满意或不满意程度"的意思重复了。
+
+正确输出应该合并为：
+```
+We talked about loss functions to quantify how happy or unhappy we are with different settings of the weights.
+我们讨论了用损失函数来量化我们对不同权重设置的满意或不满意程度。
+```
+
+==== 你的任务 ====
+1. **识别语义重复**：找出表达相同或相似意思的段落
+2. **合并重复内容**：将重复的英文句子合并成完整句子，对应生成一个完整的中文翻译
+3. **删除冗余**：删除多余的翻译，保证每个意思只出现一次
+4. **保持格式**：英文段落 + 空行 + 中文翻译 + 空行
+
+==== 输入内容 ====
+{boundary_content}
+
+==== 输出要求 ====
+直接输出去重合并后的内容。格式：
+
+英文段落
+
+中文翻译
+
+（不要添加任何解释或标记）"""
+
+    def extract_boundary_context(self, content: str, split_position: int, 
+                                  context_chars: int = 500) -> tuple:
+        """
+        根据分割位置提取边界上下文（提取分割点前后各2个段落）
+        
+        Args:
+            content: 完整文档内容
+            split_position: 分割点在文档中的字符位置
+            context_chars: 备用上下文字符数（当段落提取失败时使用）
+            
+        Returns:
+            (边界上下文字符串, 实际开始位置, 实际结束位置)
+        """
+        # 按段落分割（双换行符分隔）
+        # 先找到分割点所在的位置
+        paragraphs_before = []
+        paragraphs_after = []
+        
+        # 将内容按双换行分割成段落
+        parts = re.split(r'\n\n+', content)
+        
+        # 计算每个段落在原文中的位置
+        current_pos = 0
+        split_para_idx = -1
+        para_positions = []  # (start, end, content)
+        
+        for i, para in enumerate(parts):
+            para_start = content.find(para, current_pos)
+            if para_start == -1:
+                para_start = current_pos
+            para_end = para_start + len(para)
+            para_positions.append((para_start, para_end, para))
+            
+            # 找到分割点所在或之后的第一个段落
+            if split_para_idx == -1 and para_end >= split_position:
+                split_para_idx = i
+            
+            current_pos = para_end
+        
+        if split_para_idx == -1:
+            split_para_idx = len(para_positions) - 1
+        
+        # 提取分割点前2个段落和后2个段落
+        start_idx = max(0, split_para_idx - 2)
+        end_idx = min(len(para_positions), split_para_idx + 3)
+        
+        # 计算实际的字符位置
+        start_pos = para_positions[start_idx][0]
+        end_pos = para_positions[end_idx - 1][1]
+        
+        # 提取内容
+        boundary_content = content[start_pos:end_pos]
+        
+        self.logger.debug(f"📍 边界提取: 段落 {start_idx+1}-{end_idx}/{len(para_positions)}, 字符 {start_pos}-{end_pos}")
+        
+        return boundary_content, start_pos, end_pos
+
+    async def optimize_single_boundary_async(self, session: aiohttp.ClientSession,
+                                              boundary_content: str, 
+                                              boundary_index: int) -> tuple:
+        """
+        异步优化单个边界
+        
+        Returns:
+            (边界索引, 修复后的内容, 是否成功)
+        """
+        self.logger.info(f"🔧 正在优化边界 {boundary_index + 1}...")
+        
+        for attempt in range(self.config['retry_attempts']):
+            try:
+                prompt = self.get_boundary_optimization_prompt().format(
+                    boundary_content=boundary_content
+                )
+                
+                payload = {
+                    "model": self.config['model'],
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "你是专业的文档编辑助手，专注于修复文本分割边界问题。"
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": self.config['temperature'],
+                    "max_tokens": 2000
+                }
+                
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                timeout = aiohttp.ClientTimeout(total=self.config['request_timeout'])
+                
+                async with session.post(
+                    self.base_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout
+                ) as response:
+                    
+                    if response.status == 200:
+                        result = await response.json()
+                        if 'choices' in result and result['choices']:
+                            fixed_content = result['choices'][0]['message']['content'].strip()
+                            self.logger.info(f"✅ 边界 {boundary_index + 1} 优化完成")
+                            return (boundary_index, fixed_content, True)
+                        else:
+                            raise Exception("API响应格式错误")
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"API错误 {response.status}: {error_text}")
+                        
+            except Exception as e:
+                wait_time = self.config['retry_delay'] * (2 ** attempt)
+                self.logger.warning(f"边界 {boundary_index + 1} 优化失败 (第{attempt+1}次): {e}")
+                
+                if attempt < self.config['retry_attempts'] - 1:
+                    await asyncio.sleep(wait_time)
+                else:
+                    self.logger.error(f"边界 {boundary_index + 1} 优化彻底失败")
+                    return (boundary_index, None, False)
+
+    def apply_boundary_fix(self, content: str, start_pos: int, end_pos: int,
+                           fixed_content: str) -> str:
+        """应用单个边界修复"""
+        if not fixed_content:
+            return content
+        
+        # 清理修复内容
+        cleaned_fix = fixed_content.strip()
+        # 移除可能的标记（如果AI仍然返回了的话）
+        cleaned_fix = cleaned_fix.replace('---SPLIT_POINT---', '\n\n')
+        cleaned_fix = re.sub(r'\n{3,}', '\n\n', cleaned_fix)
+        cleaned_fix = cleaned_fix.strip()
+        
+        # 替换原始内容
+        new_content = content[:start_pos] + cleaned_fix + content[end_pos:]
+        
+        return new_content
+
+    async def optimize_boundaries_async(self, content: str, 
+                                         split_positions: List[int]) -> str:
+        """
+        异步优化所有边界
+        
+        Args:
+            content: 文档内容
+            split_positions: 分割点位置列表
+            
+        Returns:
+            优化后的内容
+        """
+        if not split_positions:
+            self.logger.info("✅ 没有需要优化的边界")
+            return content
+        
+        self.logger.info(f"🔧 开始边界优化: {len(split_positions)} 个分割点")
+        
+        context_chars = self.config.get('boundary_context_chars', 500)
+        
+        # 顺序处理每个边界，并实时更新位置
+        connector = aiohttp.TCPConnector(limit=1, limit_per_host=1)
+        
+        # 从后向前处理，这样前面的位置不会受影响
+        sorted_positions = sorted(enumerate(split_positions), key=lambda x: x[1], reverse=True)
+        
+        async with aiohttp.ClientSession(connector=connector) as session:
+            for original_idx, split_pos in sorted_positions:
+                # 提取当前边界上下文
+                boundary_content, start_pos, end_pos = self.extract_boundary_context(
+                    content, split_pos, context_chars
+                )
+                
+                # 优化边界
+                idx, fixed_content, success = await self.optimize_single_boundary_async(
+                    session, boundary_content, original_idx
+                )
+                
+                # 应用修复
+                if success and fixed_content:
+                    content = self.apply_boundary_fix(
+                        content, start_pos, end_pos, fixed_content
+                    )
+                    self.logger.debug(f"应用边界 {original_idx + 1} 修复")
+        
+        self.logger.info(f"🎉 边界优化完成! 成功优化 {len(split_positions)} 处边界")
         
         return content
 
@@ -618,14 +890,20 @@ Hello world. This is a test.
 
 def main():
     parser = argparse.ArgumentParser(description='优化字幕转换器 - 顺序处理、智能分块、段落级翻译')
-    parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='./raw')
-    parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="output.md")
+    parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='../raw')
+    parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="../output")
     parser.add_argument('-k', '--api-key', help='DeepSeek API密钥')
-    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=200)
+    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=400)
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')
     parser.add_argument('--enable-retry', action='store_true', help='启用失败内容自动重处理')
+    parser.add_argument('--enable-boundary-optimization', action='store_true', default=True,
+                        help='启用边界优化（处理完成后用AI优化分块分割处，默认启用）')
+    parser.add_argument('--disable-boundary-optimization', action='store_true',
+                        help='禁用边界优化')
+    parser.add_argument('--boundary-context-chars', type=int, default=500,
+                        help='边界优化时前后各取的上下文字符数 (默认: 500)')
     
     args = parser.parse_args()
     
@@ -641,7 +919,9 @@ def main():
     config = {
         "chunk_size": args.chunk_size,
         "temperature": args.temperature,
-        "enable_retry": args.enable_retry
+        "enable_retry": args.enable_retry,
+        "enable_boundary_optimization": args.enable_boundary_optimization and not args.disable_boundary_optimization,
+        "boundary_context_chars": args.boundary_context_chars
     }
     
     try:
