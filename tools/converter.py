@@ -33,8 +33,8 @@ class OptimizedSubtitleConverter:
         default_config = {
             "model": "deepseek-chat",
             "temperature": 0.1,  # 低温度确保准确性
-            "max_tokens": 3500,
-            "request_timeout": 40,
+            "max_tokens": 8192,
+            "request_timeout": 600,
             "retry_attempts": 3,
             "retry_delay": 2
         }
@@ -84,7 +84,7 @@ class OptimizedSubtitleConverter:
 ==== 处理要求 ====
 1. **错误修正**：识别并修正可能存在的识别错误, 确保文本准确性
 2. **完整性检查**：检查文本末尾，识别被截断的不完整句子
-3. **段落整理**：将完整句子按语义分段（每2-4句为一段），用空行分隔
+3. **语义分段**：根据内容的语义主题自然分段，确保每个段落围绕一个完整的主题或论点, 用空行分割
 4. **翻译准确性**：提供准确、专业、符合中文表达习惯的翻译
 
 ==== 输出格式 ====
@@ -105,13 +105,9 @@ English paragraph 2.
 hello world this is a test we are learning something new and then we
 
 正确输出：
-Hello world. This is a test.
+Hello world. This is a test. We are learning something new.
 
-你好世界。这是一个测试。
-
-We are learning something new.
-
-我们正在学习新东西。
+你好世界, 这是一个测试. 我们正在学习新东西. 
 
 [不完整句子: And then we]
 
@@ -170,7 +166,7 @@ We are learning something new.
                     "messages": [
                         {
                             "role": "system",
-                            "content": "你是专业的双语文档编辑助手，专注于高质量的内容整理和翻译。"
+                            "content": "你是专业的双语文档编辑助手，翻译专家, 专注于高质量的内容整理和翻译。"
                         },
                         {
                             "role": "user",
@@ -650,7 +646,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
                     "messages": [
                         {
                             "role": "system",
-                            "content": "你是专业的文档编辑助手，专注于修复文本分割边界问题。"
+                            "content": "你是专业的文档编辑助手, 翻译专家，专注于修复文本分割边界问题。"
                         },
                         {
                             "role": "user",
@@ -870,7 +866,7 @@ def main():
     parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='../raw')
     parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="../output")
     parser.add_argument('-k', '--api-key', help='DeepSeek API密钥')
-    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=400)
+    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=3200)
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')
