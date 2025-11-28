@@ -181,7 +181,7 @@ class YouTubeSubtitleDownloader:
 
     def download_subtitle(self, url: str, languages: List[str]) -> List[str]:
         """
-        使用 YouTube Transcript API 直接下载字幕并保存为 TXT
+        使用 yt-dlp 下载字幕（支持 cookies 绕过验证）
         
         Args:
             url: YouTube 视频 URL
@@ -200,61 +200,64 @@ class YouTubeSubtitleDownloader:
         try:
             self.logger.info(f"正在下载视频 {video_id} 的字幕...")
             
-            # 获取视频信息（标题等）
-            video_info = self.get_video_info(video_id)
-            video_title = video_info.get('title', video_id)
+            # 构建语言参数
+            lang_str = ','.join(languages)
             
-            # 清理文件名中的非法字符
-            safe_title = self._sanitize_filename(video_title)
+            # 使用 yt-dlp 下载字幕
+            ydl_opts = {
+                'skip_download': True,  # 不下载视频
+                'writesubtitles': True,  # 下载字幕
+                'writeautomaticsub': True,  # 也下载自动生成的字幕
+                'subtitleslangs': languages,  # 字幕语言
+                'subtitlesformat': 'vtt/srt/best',  # 字幕格式
+                'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
+                'quiet': False,
+                'no_warnings': False,
+                # 使用 cookies 文件绕过验证
+                'cookiefile': str(Path(__file__).parent / 'cookies.txt'),
+            }
             
-            # 创建 API 实例并获取可用字幕列表
-            api = YouTubeTranscriptApi()
-            transcript_list = api.list(video_id)
+            # 检查 cookies 文件是否存在
+            cookies_path = Path(__file__).parent / 'cookies.txt'
+            if not cookies_path.exists():
+                self.logger.warning(f"未找到 cookies.txt 文件，尝试从浏览器获取...")
+                # 尝试从 Edge 浏览器获取 cookies
+                ydl_opts.pop('cookiefile')
+                ydl_opts['cookiesfrombrowser'] = ('edge',)
             
-            # 尝试下载每种语言的字幕
-            for lang in languages:
-                try:
-                    # 准备语言代码列表（包含可能的变体）
-                    lang_variants = [lang]
-                    if lang == 'zh-CN':
-                        lang_variants = ['zh-Hans', 'zh-CN', 'zh']
-                    elif lang == 'zh-TW':
-                        lang_variants = ['zh-Hant', 'zh-TW']
-                    
-                    # 尝试获取字幕
-                    subtitle_data = None
-                    used_lang = None
-                    
-                    for variant in lang_variants:
-                        try:
-                            transcript = transcript_list.find_transcript([variant])
-                            subtitle_data = transcript.fetch()
-                            used_lang = variant
-                            self.logger.info(f"找到 {variant} 字幕")
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            
+            # 记录下载前的文件列表
+            existing_files = set(self.output_dir.glob('*.*'))
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+                video_title = info.get('title', video_id)
+                safe_title = self._sanitize_filename(video_title)
+                
+                # 查找新下载的字幕文件
+                new_files = set(self.output_dir.glob('*.*')) - existing_files
+                
+                for lang in languages:
+                    # 查找匹配语言的字幕文件
+                    for new_file in new_files:
+                        if f'.{lang}.' in new_file.name and new_file.suffix in ['.vtt', '.srt']:
+                            # 读取字幕并转换为纯文本
+                            txt_content = self._extract_text_from_subtitle(new_file)
+                            
+                            # 保存为 TXT 文件
+                            txt_filename = f"{safe_title}_{lang}.txt"
+                            txt_path = self.output_dir / txt_filename
+                            
+                            with open(txt_path, 'w', encoding='utf-8') as f:
+                                f.write(txt_content)
+                            
+                            self.logger.info(f"✓ 下载成功: {txt_filename}")
+                            downloaded_files.append(str(txt_path))
+                            
+                            # 删除原始字幕文件
+                            new_file.unlink()
                             break
-                        except:
-                            continue
-                    
-                    if subtitle_data:
-                        # 提取纯文本（使用 .text 属性而不是字典访问）
-                        text_lines = [entry.text for entry in subtitle_data]
-                        full_text = '\n'.join(text_lines)
-                        
-                        # 保存为 TXT 文件，使用视频标题作为文件名
-                        txt_filename = f"{safe_title}_{lang}.txt"
-                        txt_path = self.output_dir / txt_filename
-                        
-                        with open(txt_path, 'w', encoding='utf-8') as f:
-                            f.write(full_text)
-                        
-                        self.logger.info(f"✓ 下载成功: {txt_filename}")
-                        downloaded_files.append(str(txt_path))
-                    else:
-                        self.logger.warning(f"未找到 {lang} 字幕")
-                        
-                except Exception as e:
-                    self.logger.warning(f"下载 {lang} 字幕失败: {e}")
-                    continue
             
             if not downloaded_files:
                 self.logger.warning("未能下载任何字幕文件")
@@ -265,6 +268,44 @@ class YouTubeSubtitleDownloader:
             self.logger.debug(traceback.format_exc())
         
         return downloaded_files
+    
+    def _extract_text_from_subtitle(self, subtitle_path: Path) -> str:
+        """
+        从 VTT/SRT 字幕文件中提取纯文本
+        
+        Args:
+            subtitle_path: 字幕文件路径
+            
+        Returns:
+            纯文本内容
+        """
+        import re
+        
+        with open(subtitle_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 移除 VTT 头部
+        content = re.sub(r'^WEBVTT\n.*?\n\n', '', content, flags=re.DOTALL)
+        
+        # 移除时间戳行 (00:00:00.000 --> 00:00:00.000)
+        content = re.sub(r'\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}.*?\n', '', content)
+        
+        # 移除 SRT 序号行
+        content = re.sub(r'^\d+\n', '', content, flags=re.MULTILINE)
+        
+        # 移除 VTT 标签 (如 <c>, </c>, <00:00:00.000> 等)
+        content = re.sub(r'<[^>]+>', '', content)
+        
+        # 移除空行并合并
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        
+        # 去除重复的连续行
+        unique_lines = []
+        for line in lines:
+            if not unique_lines or line != unique_lines[-1]:
+                unique_lines.append(line)
+        
+        return '\n'.join(unique_lines)
     
 def main():
     """命令行入口"""
