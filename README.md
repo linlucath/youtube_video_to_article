@@ -24,3 +24,6 @@ python ./main.py --youtube_link "{{youtube视频链接/ID}}"
 
 -视频: https://www.youtube.com/watch?v=dUzLD91Sj-o&list=PL5-TkQAfAZFbzxjBHtzdVCWE0Zbhomg7r
 -文章: https://linlucath.github.io/blog/lecture-12_-recurrent-networks_en/lecture-12_-recurrent-networks_en
+
+## 费用估计
+处理一段 1小时20分钟 的视频大约耗费 0.1 RMB
