@@ -356,6 +356,8 @@ def main():
     # 创建下载器
     downloader = YouTubeSubtitleDownloader(output_dir=args.output)
     
+    print(downloader.get_available_transcripts(downloader.extract_video_id(args.url)))
+
     # 下载字幕
     downloaded = downloader.download_subtitle(
         args.url,

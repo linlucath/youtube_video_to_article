@@ -803,9 +803,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
                 self.logger.info(f"{'='*50}")
                 
                 # 生成输出文件名
-                # 将文件名中的特殊字符替换为更简洁的格式
-                clean_name = self.clean_filename(input_file.stem)
-                output_file = output_path / f"{clean_name}.md"
+                output_file = output_path / f"{input_file.stem}.md"
                 
                 # 处理文件
                 result_file = self.process_file(str(input_file), str(output_file))
@@ -841,32 +839,25 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
         
         return processed_files
 
-    def clean_filename(self, filename: str) -> str:
-        """清理文件名，生成更简洁的输出文件名"""
-        # 提取讲座编号
-        lecture_match = re.search(r'Lecture\s*(\d+)', filename, re.IGNORECASE)
-        if lecture_match:
-            lecture_num = lecture_match.group(1)
-            return f"Lecture{lecture_num}_Notes"
+    # def clean_filename(self, filename: str) -> str:
+    #     """清理文件名，生成更简洁的输出文件名"""
+    #     clean = re.sub(r'[\[\](){}]', '', filename)
+    #     clean = re.sub(r'[^\w\s-]', '', clean)
+    #     clean = re.sub(r'\s+', '_', clean.strip())
+    #     clean = clean.replace('__', '_').strip('_')
         
-        # 如果没有找到讲座编号，清理特殊字符
-        clean = re.sub(r'[\[\](){}]', '', filename)
-        clean = re.sub(r'[^\w\s-]', '', clean)
-        clean = re.sub(r'\s+', '_', clean.strip())
-        clean = clean.replace('__', '_').strip('_')
+    #     # 限制长度
+    #     if len(clean) > 50:
+    #         clean = clean[:50].rstrip('_')
         
-        # 限制长度
-        if len(clean) > 50:
-            clean = clean[:50].rstrip('_')
-        
-        return clean or "processed_file"
+    #     return clean or "processed_file"
 
 def main():
     parser = argparse.ArgumentParser(description='优化字幕转换器 - 顺序处理、智能分块、段落级翻译')
     parser.add_argument('--input_path', help='输入字幕文件路径或文件夹路径', default='../raw')
     parser.add_argument('-o', '--output', help='输出文件路径或文件夹路径', default="../output")
     parser.add_argument('-k', '--api-key', help='DeepSeek API密钥')
-    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=3200)
+    parser.add_argument('--chunk-size', type=int, help='每块包含的单词数', default=1200)
     parser.add_argument('--temperature', type=float, default=0.1, help='AI温度参数')
     parser.add_argument('--batch', action='store_true', help='批量处理模式，处理文件夹中的所有文件')
     parser.add_argument('--pattern', default='*.txt', help='批量模式下的文件匹配模式 (默认: *.txt)')

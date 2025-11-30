@@ -8,15 +8,19 @@
 
 2. 设置环境变量 DEEPSEEK_API_KEY
 
-3. 执行 
+3. 获取 cookies.txt 文件, 可使用浏览器插件" Cookie-Editor"导出, 格式为 Netscape, 保存至 ./tools/cookies.txt
+
+4. 执行 
+```bash
+pip install -r requirements.txt
 cd tools
 python ./main.py --youtube_link "{{youtube视频链接/ID}}"
-
+```
 ## 其他
 
 1. --youtube_link 可使用 -l 代替
 
 ## 效果展示
 
--视频: https://www.youtube.com/watch?v=cfV70T6Owpw&list=PL5q_lef6zVkaTY_cT1k7qFNF2TidHCe-1&index=21
--文章: https://linlucath.github.io/blog/session2022/session2022_notes/
+-视频: https://www.youtube.com/watch?v=dUzLD91Sj-o&list=PL5-TkQAfAZFbzxjBHtzdVCWE0Zbhomg7r
+-文章: https://linlucath.github.io/blog/lecture-12_-recurrent-networks_en/lecture-12_-recurrent-networks_en
