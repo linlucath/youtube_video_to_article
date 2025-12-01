@@ -802,7 +802,7 @@ We talked about loss functions to quantify how happy or unhappy we are with diff
                 self.logger.info(f"📄 处理文件 {i}/{len(files)}: {input_file.name}")
                 self.logger.info(f"{'='*50}")
                 
-                # 生成输出文件名
+                # 生成输出文件名（保留原始文件名，标题提取由 formatter 处理）
                 output_file = output_path / f"{input_file.stem}.md"
                 
                 # 处理文件

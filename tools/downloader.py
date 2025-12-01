@@ -203,6 +203,9 @@ class YouTubeSubtitleDownloader:
             # 构建语言参数
             lang_str = ','.join(languages)
             
+            # 只使用 cookies.txt 文件（从浏览器获取 cookies 在 Windows 上有 DPAPI 问题）
+            cookies_path = Path(__file__).parent / 'cookies.txt'
+            
             # 使用 yt-dlp 下载字幕
             ydl_opts = {
                 'skip_download': True,  # 不下载视频
@@ -213,17 +216,14 @@ class YouTubeSubtitleDownloader:
                 'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
                 'quiet': False,
                 'no_warnings': False,
-                # 使用 cookies 文件绕过验证
-                'cookiefile': str(Path(__file__).parent / 'cookies.txt'),
+                'verbose': True
             }
             
-            # 检查 cookies 文件是否存在
-            cookies_path = Path(__file__).parent / 'cookies.txt'
-            if not cookies_path.exists():
-                self.logger.warning(f"未找到 cookies.txt 文件，尝试从浏览器获取...")
-                # 尝试从 Edge 浏览器获取 cookies
-                ydl_opts.pop('cookiefile')
-                ydl_opts['cookiesfrombrowser'] = ('edge',)
+            if cookies_path.exists():
+                self.logger.info(f"使用 cookies.txt 文件进行认证...")
+                ydl_opts['cookiefile'] = str(cookies_path)
+            else:
+                self.logger.warning(f"未找到 cookies.txt 文件，可能无法访问受限视频")
             
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             
@@ -260,7 +260,10 @@ class YouTubeSubtitleDownloader:
                             break
             
             if not downloaded_files:
-                self.logger.warning("未能下载任何字幕文件")
+                self.logger.error("未能下载任何字幕文件。可能的原因：")
+                self.logger.error("1. cookies.txt 已过期，请重新导出")
+                self.logger.error("2. 该视频没有字幕")
+                self.logger.error("3. YouTube 暂时封锁了请求")
         
         except Exception as e:
             self.logger.error(f"字幕下载失败: {e}")
