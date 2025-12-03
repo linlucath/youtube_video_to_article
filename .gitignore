@@ -8,5 +8,6 @@ __pycache__/
 .venv/
 config.yml
 
+temp*
 test/
 cookies*
